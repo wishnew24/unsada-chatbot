@@ -7,7 +7,7 @@ st.set_page_config(page_title="Chatbot Fakultas Teknik UNSADA", page_icon="🤖"
 
 @st.cache_resource
 def load_model():
-    return SentenceTransformer('model_finetuned_unsada')
+    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 @st.cache_data
 def load_faq_data():
