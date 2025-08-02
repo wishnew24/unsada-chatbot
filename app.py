@@ -1,61 +1,65 @@
-from flask import Flask, request, jsonify
+import streamlit as st
 import json
 import torch
 from sentence_transformers import SentenceTransformer, util
 
-app = Flask(__name__)
+st.set_page_config(page_title="Chatbot Fakultas Teknik UNSADA", page_icon="🤖")
 
-# ✅ Load model hasil fine-tuning
-model = SentenceTransformer('model_finetuned_unsada')
+@st.cache_resource
+def load_model():
+    return SentenceTransformer('model_finetuned_unsada')
 
-# ✅ Load dataset FAQ
-with open('train_data.json', 'r', encoding='utf-8') as f:
-    faq_data = json.load(f)
+@st.cache_data
+def load_faq_data():
+    with open('train_data.json', 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-# ✅ Siapkan daftar pertanyaan dan jawaban
+model = load_model()
+faq_data = load_faq_data()
+
+# Siapkan pertanyaan dan jawaban
 all_questions = []
 all_answers = []
 
 for item in faq_data:
     question = item['question']
     answer = item['answer']
-
-    # Tambahkan pertanyaan utama
     all_questions.append(question)
     all_answers.append(answer)
 
-    # Tambahkan variasi (jika ada)
     for variation in item.get('variations', []):
         all_questions.append(variation)
         all_answers.append(answer)
 
-# ✅ Encode semua pertanyaan (sekali saja)
+# Encode semua pertanyaan sekali saja
 question_embeddings = model.encode(all_questions, convert_to_tensor=True, normalize_embeddings=True)
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    data = request.get_json()
-    user_input = data.get("message", "").strip()
-
-    if not user_input:
-        return jsonify({"response": "Pesan kosong tidak dapat diproses."})
-
-    # ✅ Encode input pengguna
+def get_response(user_input):
     input_embedding = model.encode(user_input, convert_to_tensor=True, normalize_embeddings=True)
-
-    # ✅ Hitung similarity
     similarity_scores = util.cos_sim(input_embedding, question_embeddings)[0]
     best_idx = torch.argmax(similarity_scores).item()
     best_score = similarity_scores[best_idx].item()
 
-    # ✅ Threshold relevansi jawaban
     threshold = 0.60
     if best_score >= threshold:
-        answer = all_answers[best_idx]
+        return all_answers[best_idx]
     else:
-        answer = "Maaf, saya tidak memahami pertanyaan Anda. Silakan ulangi dengan pertanyaan yang lebih spesifik."
+        return "Maaf, saya tidak memahami pertanyaan Anda. Silakan ulangi dengan pertanyaan yang lebih spesifik."
 
-    return jsonify({"response": answer})
+# UI Chatbot
+st.title("🤖 Chatbot Fakultas Teknik UNSADA")
+st.markdown("Silakan ketik pertanyaan Anda di bawah ini.")
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+user_input = st.chat_input("Tanyakan sesuatu...")
+if user_input:
+    response = get_response(user_input)
+    st.session_state.chat_history.append(("user", user_input))
+    st.session_state.chat_history.append(("bot", response))
+
+# Tampilkan riwayat chat
+for role, message in st.session_state.chat_history:
+    with st.chat_message("user" if role == "user" else "assistant"):
+        st.write(message)
